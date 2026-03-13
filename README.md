@@ -58,7 +58,8 @@ Clone the repo
 git clone https://github.com/atifkhan78666/leadflow-ai.git
 cd leadflow-ai
 
-
+pip install -r requirements.txt
+streamlit run app.py
 ---
 
 # Environment Variables
