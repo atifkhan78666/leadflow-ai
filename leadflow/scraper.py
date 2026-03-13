@@ -7,7 +7,7 @@ from utils.geo_utils import get_region_from_location
 
 from utils.email_extractor import extract_email
 
-API_KEY = "AIzaSyDNZ4vbU3-tn6L5IOuCl-yc1i2xGusoisU"
+API_KEY = "GOOGLE_MAPS_API_KEY"
 
 gmaps = googlemaps.Client(key=API_KEY)
 
