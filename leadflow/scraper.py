@@ -7,7 +7,7 @@ from utils.geo_utils import get_region_from_location
 
 from utils.email_extractor import extract_email
 
-API_KEY = "GOOGLE_MAPS_API_KEY"
+API_KEY = "AIzaSyDNZ4vbU3-tn6L5IOuCl-yc1i2xGusoisU"
 
 gmaps = googlemaps.Client(key=API_KEY)
 
@@ -90,11 +90,11 @@ def scrape_leads(search_query, num_leads):
         reviews = details.get("user_ratings_total")
         maps_url = details.get("url")
 
-        email = None
 
         # if website:
         #     email = extract_email(website)
 
+        email = None
         whatsapp_link = None
 
         if phone:

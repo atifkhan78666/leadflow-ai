@@ -44,19 +44,29 @@ num_leads = st.sidebar.slider(
 
 generate_button = st.sidebar.button("Generate Leads")
 
+
 if generate_button:
 
     if search_query == "":
         st.error("Please enter a search query")
         st.stop()
-
-    with st.spinner("Scraping Google Maps..."):
-
+    with st.spinner("Finding businesses..."):
         leads = scrape_leads(search_query, num_leads)
-
-    if len(leads) == 0:
+    if not leads:
         st.warning("No leads found.")
         st.stop()
+    saved = 0
+
+    saved = 0
+
+    for lead in leads:
+        insert_lead(lead, search_query, search_query)
+        saved += 1
+    st.success(f"{saved} leads saved to database")
+
+    df = pd.DataFrame(leads)
+    st.subheader("Preview")
+    st.dataframe(df, use_container_width=True)
 
     # Save leads for enrichment later
     st.session_state["leads"] = leads

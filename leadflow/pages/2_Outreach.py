@@ -3,7 +3,7 @@ import pandas as pd
 import smtplib
 from email.mime.text import MIMEText
 
-from database import get_unsent_leads, mark_email_sent
+from database import get_all_leads, mark_email_sent
 
 st.set_page_config(page_title="Email Outreach")
 
@@ -20,8 +20,6 @@ tab1, tab2, tab3 = st.tabs(
     ["Lead Manager", "Campaign Builder", "Campaign Results"]
 )
 
-
-
 # ---------------- ADD LEAD DIALOG ---------------- #
 
 @st.dialog("Add New Lead")
@@ -36,25 +34,28 @@ def add_lead_dialog():
 
     if st.button("Save Lead"):
 
-        if not name or not email:
-            st.warning("Business name and email are required.")
+        if not name:
+            st.warning("Business name is required.")
             return
 
-        new_lead = {
+        from database import insert_lead
+
+        lead = {
             "Name": name,
-            "Email": email,
+            "Address": "",
             "Phone": phone,
             "Website": website,
-            "Industry": industry,
-            "Location": location
+            "Email": email,
+            "Rating": "",
+            "Reviews": "",
+            "Google Maps": "",
         }
-        df = st.session_state.get("leads_df", pd.DataFrame())
-        df = pd.concat(
-            [df, pd.DataFrame([new_lead])],
-            ignore_index=True
-        )
-        st.session_state["leads_df"] = df
+
+        insert_lead(lead, industry, location)
+
         st.success("Lead added successfully")
+
+        st.rerun()
 
 # ============================================================
 # TAB 1 — LEAD MANAGER
@@ -66,14 +67,19 @@ with tab1:
 
     col1, col2, col3 = st.columns(3)
 
-    # Load scraped leads
+    # ---------------- LOAD LEADS ---------------- #
+
     with col1:
+
         if st.button("Load Scraped Leads"):
-            leads = get_unsent_leads()
+
+            leads = get_all_leads()
 
             if len(leads) == 0:
                 st.warning("No leads found.")
+
             else:
+
                 df = pd.DataFrame(leads)
 
                 df.columns = [
@@ -94,13 +100,22 @@ with tab1:
 
                 st.session_state["leads_df"] = df
 
-                st.success("Scraped leads loaded.")
+                email_leads = df[df["Email"].notna() & (df["Email"] != "")]
 
-    # Upload CSV
+                st.success(f"{len(df)} leads loaded")
+
+                st.subheader("Leads Ready for Outreach")
+
+                st.dataframe(email_leads, use_container_width=True)
+
+    # ---------------- CSV UPLOAD ---------------- #
+
     with col2:
+
         file = st.file_uploader("Upload Leads CSV")
 
         if file:
+
             csv_df = pd.read_csv(file)
 
             st.session_state["leads_df"] = pd.concat(
@@ -110,51 +125,28 @@ with tab1:
 
             st.success("CSV leads added.")
 
-    # Clear leads
+    # ---------------- CLEAR LIST ---------------- #
+
     with col3:
+
         if st.button("Clear Lead List"):
+
             st.session_state["leads_df"] = pd.DataFrame()
+
             st.success("Lead list cleared.")
 
     st.divider()
 
-    # Popup form
-    # Add lead button
+    # ---------------- ADD LEAD ---------------- #
+
     if st.button("➕ Add Lead"):
-            add_lead_dialog()
 
-            # name = st.text_input("Business Name")
-            # email = st.text_input("Email")
-            # phone = st.text_input("Phone")
-            # website = st.text_input("Website")
-            # industry = st.text_input("Industry")
-            # location = st.text_input("Location")
-
-            if st.button("Save Lead"):
-
-                new_lead = {
-                    "Name": name,
-                    "Email": email,
-                    "Phone": phone,
-                    "Website": website,
-                    "Industry": industry,
-                    "Location": location
-                }
-
-                df = st.session_state["leads_df"]
-
-                df = pd.concat(
-                    [df, pd.DataFrame([new_lead])],
-                    ignore_index=True
-                )
-
-                st.session_state["leads_df"] = df
-
-                st.success("Lead added successfully")
+        add_lead_dialog()
 
     st.divider()
 
-    # Lead table
+    # ---------------- LEAD TABLE ---------------- #
+
     if not st.session_state["leads_df"].empty:
 
         st.subheader("Lead Table")
@@ -170,7 +162,9 @@ with tab1:
         st.write(f"{len(edited_df)} leads ready")
 
     else:
+
         st.info("No leads available yet.")
+
 
 # ============================================================
 # TAB 2 — CAMPAIGN BUILDER
@@ -185,6 +179,7 @@ with tab2:
     body = st.text_area(
         "Email Template (HTML)",
         height=250,
+
         value="""
 <!DOCTYPE html>
 <html>
@@ -265,13 +260,12 @@ Visit Website
 </body>
 </html>
 """
-
-
     )
 
     st.sidebar.header("SMTP Settings")
 
     sender_email = st.sidebar.text_input("Sender Email")
+
     sender_password = st.sidebar.text_input(
         "Email Password / App Password",
         type="password"
@@ -286,10 +280,14 @@ Visit Website
         "SMTP Port",
         value=587
     )
-    df = df[df["Email"].notna()]
+
+    # ---------------- SEND CAMPAIGN ---------------- #
+
     if st.button("Send Campaign"):
 
-        if st.session_state["leads_df"].empty:
+        df = st.session_state["leads_df"]
+
+        if df.empty:
             st.error("No leads available.")
             st.stop()
 
@@ -297,7 +295,12 @@ Visit Website
             st.error("Please enter a subject.")
             st.stop()
 
-        df = st.session_state["leads_df"]
+        # send only to leads with email
+        df = df[df["Email"].notna() & (df["Email"] != "")]
+
+        if df.empty:
+            st.warning("No leads with email available.")
+            st.stop()
 
         results = []
 
@@ -306,11 +309,15 @@ Visit Website
         try:
 
             server = smtplib.SMTP(smtp_server, smtp_port)
+
             server.starttls()
+
             server.login(sender_email, sender_password)
 
         except:
+
             st.error("SMTP Login Failed")
+
             st.stop()
 
         for i, row in df.iterrows():
@@ -319,30 +326,43 @@ Visit Website
                 "{{Name}}",
                 str(row.get("Name", "there"))
             )
+
             msg = MIMEText(email_body, "html")
+
             msg["Subject"] = subject.strip()
+
             msg["From"] = sender_email
+
             msg["To"] = row["Email"]
+
             status = "Failed"
 
             try:
+
                 server.send_message(msg)
 
                 if "ID" in row:
                     mark_email_sent(row["ID"])
+
                 status = "Sent"
 
             except:
                 status = "Failed"
+
             results.append({
                 "Name": row.get("Name"),
                 "Email": row.get("Email"),
                 "Status": status
             })
+
             progress.progress((i + 1) / len(df))
+
         server.quit()
+
         st.session_state["campaign_results"] = pd.DataFrame(results)
+
         st.success("Campaign finished.")
+
 
 # ============================================================
 # TAB 3 — CAMPAIGN RESULTS
@@ -351,16 +371,27 @@ Visit Website
 with tab3:
 
     if "campaign_results" in st.session_state:
+
         result_df = st.session_state["campaign_results"]
+
         total = len(result_df)
+
         sent = len(result_df[result_df["Status"] == "Sent"])
+
         failed = len(result_df[result_df["Status"] == "Failed"])
+
         col1, col2, col3 = st.columns(3)
+
         col1.metric("Total Leads", total)
+
         col2.metric("Emails Sent", sent)
+
         col3.metric("Failed", failed)
+
         st.divider()
+
         st.dataframe(result_df, use_container_width=True)
 
     else:
+
         st.info("No campaign results yet.")
